@@ -1,0 +1,10 @@
+[package]
+name = "semi-automatic-minesweeper"
+version = "0.1.0"
+edition = "2021"
+description = "Native Rust GUI port of the semi-automatic minesweeper."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+eframe = "0.34.3"
+rand = "0.10.1"
