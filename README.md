@@ -1,12 +1,12 @@
 # Semi-Automatic Minesweeper
 
-IOCCC 2020 endoh1エントリーのTypeScript変換版 + RustネイティブGUI版
+TypeScriptブラウザ版 + RustネイティブGUI版
 
 ## 概要
 
-Yusuke Endoh氏によるIOCCC 2020受賞作品「Semi-Automatic Minesweeper」を、ブラウザ向けTypeScript版とRustネイティブGUI版として実装したものです。
+マインスイーパーの盤面を論理推論で補助する、半自動プレイ向けの実装です。
 
-オリジナルのC言語版は、マインスイーパーのセルを論理推論で自動的に開いたり旗を立てたりする半自動マインスイーパーでした。この版も同じ発想の推論ロジックを実装しています。
+プレイヤーがセルを開くと、確実に安全なセルや地雷だと判断できるセルを自動で処理します。ブラウザで遊べるTypeScript版と、デスクトップで動くRustネイティブGUI版を同梱しています。
 
 ## 特徴
 
@@ -122,10 +122,3 @@ cargo test
 - `src/game.rs`: ゲームロジック、推論ルール、単体テスト
 - `src/main.rs`: `egui/eframe`ネイティブGUI
 - Rust版では開示・旗・地雷に軽いライティング演出があります。
-
-## オリジナル作品について
-
-- 作者: Yusuke Endoh
-- コンテスト: IOCCC 2020
-- エントリー名: endoh1
-- オリジナルコード: https://www.ioccc.org/2020/endoh1/
