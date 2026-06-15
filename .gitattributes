@@ -1,7 +1,0 @@
-# Prefer the native Rust implementation in GitHub language stats.
-dist/** linguist-generated=true
-ts/** linguist-vendored=true
-*.html linguist-vendored=true
-*.css linguist-vendored=true
-package*.json linguist-vendored=true
-tsconfig.json linguist-vendored=true
