@@ -1,6 +1,6 @@
 # Semi-Automatic Minesweeper
 
-TypeScriptブラウザ版 + RustネイティブGUI版
+TypeScriptブラウザ版 + RustネイティブGUI版(Rustは試しにAIにコードを書いてもらったものです) 
 
 ## 概要
 
