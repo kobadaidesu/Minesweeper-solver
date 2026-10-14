@@ -570,10 +570,26 @@ class Minesweeper {
     }
 }
 // Game UI Controller
+// --- 盤面の表示倍率 ---
+// セルは画面に収まる大きさ(baseCellSize)を自動で決め、そこに zoom を掛けた px で描く。
+// 4px まで縮めると 100×100 でも1画面に収まり、60px まで広げると細かい操作がしやすい。
+const MIN_CELL_SIZE = 4;
+const MAX_CELL_SIZE = 60;
+/** これより小さいセルは枠線を細くし数字を消す(CSSの .game-board--compact) */
+const COMPACT_CELL_SIZE = 12;
+/** ＋/− ボタン1回あたりの倍率 */
+const ZOOM_STEP = 1.25;
+/** ホイール1ノッチ(deltaY≈100)でおよそ ×1.22。ピンチは deltaY が小さいので滑らかに動く */
+const WHEEL_ZOOM_SENSITIVITY = 0.002;
 class GameUI {
     constructor() {
         this.game = null;
         this.boardElement = document.getElementById('gameBoard');
+        this.viewportElement = document.getElementById('boardViewport');
+        this.zoomText = document.getElementById('zoomText');
+        this.zoom = 1;
+        this.baseCellSize = 30;
+        this.cellSize = 30;
         this.newGameBtn = document.getElementById('newGameBtn');
         this.logElement = document.getElementById('reasoningLog');
         this.logScrollPending = false; // ログスクロールの重複防止フラグ
@@ -759,6 +775,31 @@ class GameUI {
                 }
             }, 250);
         });
+        // Zoom control
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomFitBtn = document.getElementById('zoomFitBtn');
+        const zoomResetBtn = document.getElementById('zoomResetBtn');
+        if (zoomInBtn)
+            zoomInBtn.addEventListener('click', () => this.setZoom(this.zoom * ZOOM_STEP));
+        if (zoomOutBtn)
+            zoomOutBtn.addEventListener('click', () => this.setZoom(this.zoom / ZOOM_STEP));
+        if (zoomFitBtn)
+            zoomFitBtn.addEventListener('click', () => this.zoomToFit());
+        if (zoomResetBtn)
+            zoomResetBtn.addEventListener('click', () => this.setZoom(1));
+        // Ctrl(⌘)+ホイールとトラックパッドのピンチ(ブラウザは ctrlKey 付きの wheel として届ける)。
+        // preventDefault でページ全体のズームを止めるので passive: false が必要。
+        if (this.viewportElement) {
+            this.viewportElement.addEventListener('wheel', (e) => {
+                if (!(e.ctrlKey || e.metaKey) || !this.game)
+                    return;
+                e.preventDefault();
+                const delta = Math.max(-100, Math.min(100, e.deltaY));
+                const factor = Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY);
+                this.setZoom(this.zoom * factor, { x: e.clientX, y: e.clientY });
+            }, { passive: false });
+        }
         // Preset buttons
         document.querySelectorAll('.preset-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -842,6 +883,12 @@ class GameUI {
         document.getElementById('mines').value = mines;
         // 背景色をリセット
         document.body.className = '';
+        // 盤面の大きさが変わったら倍率は等倍に戻す(100×100を縮小したまま初級を始めると極小になる)。
+        // 同じ大きさでやり直すときは、プレイヤーが合わせた倍率を保つ。
+        const sizeChanged = !this.game || this.game.width !== width || this.game.height !== height;
+        if (sizeChanged) {
+            this.zoom = 1;
+        }
         this.game = new Minesweeper(width, height, mines);
         this.game.logCallback = (logs) => this.updateLog(logs);
         // スライダーの現在値を新しいゲームインスタンスに適用
@@ -901,26 +948,15 @@ class GameUI {
         if (this.boardContextMenuHandler) {
             this.boardElement.removeEventListener('contextmenu', this.boardContextMenuHandler);
         }
-        // 画面サイズに基づいてセルサイズを計算
-        const gameArea = document.querySelector('.game-area');
-        const availableWidth = gameArea ? gameArea.clientWidth - 50 : window.innerWidth - 400;
-        const availableHeight = window.innerHeight - 450;
-        let cellSize = 30;
-        const maxCellSizeByWidth = Math.floor(availableWidth / this.game.width);
-        const maxCellSizeByHeight = Math.floor(availableHeight / this.game.height);
-        cellSize = Math.min(30, maxCellSizeByWidth, maxCellSizeByHeight);
-        cellSize = Math.max(15, cellSize);
-        this.boardElement.style.gridTemplateColumns = `repeat(${this.game.width}, ${cellSize}px)`;
-        this.boardElement.style.gridTemplateRows = `repeat(${this.game.height}, ${cellSize}px)`;
-        this.boardElement.style.fontSize = `${Math.max(8, cellSize * 0.6)}px`;
+        // セルの大きさはCSS変数で持ち、個々のセルには書かない(ズーム時に作り直さないため)
+        this.baseCellSize = this.computeBaseCellSize();
+        this.applyCellSize();
         // DocumentFragmentを使用して一度に追加
         const fragment = document.createDocumentFragment();
         for (let i = 0; i < this.game.cells.length; i++) {
             const cellElement = document.createElement('div');
             cellElement.className = 'cell';
             cellElement.dataset.index = i;
-            cellElement.style.width = `${cellSize}px`;
-            cellElement.style.height = `${cellSize}px`;
             fragment.appendChild(cellElement);
         }
         this.boardElement.appendChild(fragment);
@@ -948,6 +984,74 @@ class GameUI {
             this.game.dirtySet.add(i);
         }
         this.updateBoard();
+    }
+    /** 画面幅・高さから、ズーム100%のときのセルの大きさを決める(15〜30px) */
+    computeBaseCellSize() {
+        const gameArea = document.querySelector('.game-area');
+        const availableWidth = gameArea ? gameArea.clientWidth - 50 : window.innerWidth - 400;
+        const availableHeight = window.innerHeight - 450;
+        const maxCellSizeByWidth = Math.floor(availableWidth / this.game.width);
+        const maxCellSizeByHeight = Math.floor(availableHeight / this.game.height);
+        return Math.max(15, Math.min(30, maxCellSizeByWidth, maxCellSizeByHeight));
+    }
+    /** baseCellSize × zoom を実際のpxにしてCSS変数へ反映する */
+    applyCellSize() {
+        const size = Math.round(this.baseCellSize * this.zoom);
+        this.cellSize = Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, size));
+        const style = this.boardElement.style;
+        style.setProperty('--cols', String(this.game.width));
+        style.setProperty('--rows', String(this.game.height));
+        style.setProperty('--cell-size', `${this.cellSize}px`);
+        this.boardElement.classList.toggle('game-board--compact', this.cellSize < COMPACT_CELL_SIZE);
+        if (this.zoomText) {
+            this.zoomText.textContent = `${Math.round(this.zoom * 100)}%`;
+        }
+    }
+    /**
+     * 倍率を変える。anchor(画面座標)を渡すと、その点の下にあるマスが
+     * ズーム後も同じ場所に見えるようにスクロール位置を補正する。
+     */
+    setZoom(zoom, anchor = null) {
+        if (!this.game)
+            return;
+        const minZoom = MIN_CELL_SIZE / this.baseCellSize;
+        const maxZoom = MAX_CELL_SIZE / this.baseCellSize;
+        const oldSize = this.cellSize;
+        this.zoom = Math.max(minZoom, Math.min(maxZoom, zoom));
+        this.applyCellSize();
+        const viewport = this.viewportElement;
+        if (!anchor || !viewport || !oldSize)
+            return;
+        const rect = viewport.getBoundingClientRect();
+        const ratio = this.cellSize / oldSize;
+        const offsetX = anchor.x - rect.left;
+        const offsetY = anchor.y - rect.top;
+        viewport.scrollLeft = (viewport.scrollLeft + offsetX) * ratio - offsetX;
+        viewport.scrollTop = (viewport.scrollTop + offsetY) * ratio - offsetY;
+    }
+    /** 盤面全体が1画面に収まる倍率にする */
+    zoomToFit() {
+        if (!this.game)
+            return;
+        const viewport = this.viewportElement;
+        const { width, height } = this.game;
+        // 盤面の枠(padding 2px×2 + border 3px×2)と、セル間の隙間 1px を差し引く
+        const frame = 10;
+        const viewportWidth = viewport ? viewport.clientWidth : window.innerWidth;
+        // 高さは「盤面の上端から画面の下端まで」に収める。ヘッダー分を無視して
+        // CSSの max-height だけで計算すると、盤面の下が画面の外に出てしまう。
+        // 盤面の上端がすでに画面の上に隠れているときは画面全体を使い、あとで上端へ寄せる。
+        const viewportTop = viewport ? viewport.getBoundingClientRect().top : 0;
+        const visibleTop = Math.max(viewportTop, 0);
+        const cssMaxHeight = viewport ? parseFloat(getComputedStyle(viewport).maxHeight) : NaN;
+        const viewportHeight = Math.min(Number.isFinite(cssMaxHeight) ? cssMaxHeight : Infinity, window.innerHeight - visibleTop - 24);
+        const availableWidth = viewportWidth - frame - (width - 1);
+        const availableHeight = viewportHeight - frame - (height - 1);
+        const size = Math.floor(Math.min(availableWidth / width, availableHeight / height));
+        this.setZoom(size / this.baseCellSize);
+        if (viewport && viewportTop < 0) {
+            viewport.scrollIntoView({ block: 'start' });
+        }
     }
     async handleCellClick(index) {
         if (this.game.gameState === 'won' || this.game.gameState === 'lost')

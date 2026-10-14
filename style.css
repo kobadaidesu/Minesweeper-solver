@@ -237,30 +237,51 @@ h1 {
 }
 
 /* Game Board */
+/* 盤面が画面より大きいときはページを横に伸ばさず、この枠の中でスクロールさせる */
+.board-viewport {
+    overflow: auto;
+    max-height: calc(100vh - 160px);
+    margin-bottom: 30px;
+}
+
+/* セルの大きさは --cell-size 1つで決まる。ズームはこの変数を書き換えるだけで、
+   1万マスあってもDOMを作り直さない(JS側の applyCellSize を参照) */
 .game-board {
+    --cell-size: 30px;
+    --cols: 1;
+    --rows: 1;
     display: grid;
+    grid-template-columns: repeat(var(--cols), var(--cell-size));
+    grid-template-rows: repeat(var(--rows), var(--cell-size));
     gap: 1px;
     background: #999;
     padding: 2px;
-    margin: 0 auto 30px;
+    margin: 0 auto;
     width: fit-content;
     border: 3px solid #666;
     border-radius: 4px;
 }
 
 .cell {
-    width: 30px;
-    height: 30px;
+    width: var(--cell-size, 30px);
+    height: var(--cell-size, 30px);
     background: #bbb;
     border: 2px outset #ddd;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: bold;
-    font-size: 1rem;
+    font-size: calc(var(--cell-size, 30px) * 0.6);
     cursor: pointer;
     user-select: none;
-    transition: all 0.1s;
+    /* all にするとズーム時に全セルの幅・高さがアニメーションして重くなる */
+    transition: background 0.1s, transform 0.1s;
+}
+
+/* セルが小さいとき(縮小表示)。2pxの枠と数字では潰れるので、色だけで状態を見せる */
+.game-board--compact .cell {
+    border-width: 1px;
+    font-size: 0;
 }
 
 .cell:hover:not(.revealed) {
@@ -359,7 +380,8 @@ h1 {
     flex-wrap: wrap;
 }
 
-.speed-control {
+.speed-control,
+.zoom-control {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -429,7 +451,8 @@ h1 {
     text-align: center;
 }
 
-.speed-control button {
+.speed-control button,
+.zoom-control button {
     padding: 8px 12px;
     background: var(--surface-2);
     color: var(--ink);
@@ -439,8 +462,31 @@ h1 {
     font-weight: bold;
 }
 
-.speed-control button:hover {
+.speed-control button:hover,
+.zoom-control button:hover {
     background: var(--surface-3);
+}
+
+.zoom-control {
+    flex-wrap: wrap;
+}
+
+.zoom-control label {
+    font-weight: bold;
+    color: var(--ink-muted);
+}
+
+.zoom-text {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: var(--ink);
+    min-width: 56px;
+    text-align: center;
+}
+
+.zoom-hint {
+    color: var(--ink-muted);
+    font-size: 0.85rem;
 }
 
 /* Animations */
@@ -573,11 +619,5 @@ footer p {
 
     .preset-btn {
         width: 100%;
-    }
-
-    .cell {
-        width: 25px;
-        height: 25px;
-        font-size: 0.85rem;
     }
 }

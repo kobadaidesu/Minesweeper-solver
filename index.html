@@ -28,7 +28,9 @@
             </div>
           </div>
 
-          <div id="gameBoard" class="game-board"></div>
+          <div id="boardViewport" class="board-viewport">
+            <div id="gameBoard" class="game-board"></div>
+          </div>
 
           <div class="controls">
             <div class="size-controls">
@@ -98,6 +100,16 @@
               <button id="fastSpeedBtn" type="button">高速</button>
               <button id="standardSpeedBtn" type="button">標準</button>
             </div>
+
+            <div class="zoom-control">
+              <label>表示倍率:</label>
+              <button id="zoomOutBtn" type="button" aria-label="縮小">−</button>
+              <span id="zoomText" class="zoom-text">100%</span>
+              <button id="zoomInBtn" type="button" aria-label="拡大">＋</button>
+              <button id="zoomFitBtn" type="button">全体表示</button>
+              <button id="zoomResetBtn" type="button">等倍</button>
+              <span class="zoom-hint">盤面の上で Ctrl(⌘)+ホイール / ピンチでも拡縮できます</span>
+            </div>
           </div>
 
           <div class="instructions">
@@ -112,6 +124,10 @@
                 <strong>4つのルール</strong>でマインスイーパーを半自動プレイ
               </li>
               <li>あなたは直感でセルを選ぶだけ！</li>
+              <li>
+                <strong>Ctrl(⌘)+ホイール / ピンチ</strong>:
+                盤面を拡大・縮小(大きな盤面は「全体表示」で俯瞰)
+              </li>
             </ul>
 
             <h3>自動推論ルール</h3>
