@@ -68,15 +68,13 @@ Rule 5 でも決まらないときは、列挙した置き方の数から各セ�
 
 ```text
 .
+├── .github/workflows/pages.yml  main に push したらビルドして GitHub Pages に公開
 ├── package.json
 ├── package-lock.json
 ├── tsconfig.json
 ├── index.html
 ├── style.css
-├── dist/
-│   ├── solver.js
-│   ├── minesweeper.js
-│   └── minesweeper-worker.js
+├── dist/                        npm run build:web の出力(Git には入れない)
 ├── ts/
 │   ├── solver.ts              推論エンジン(DOMに触らない)
 │   ├── minesweeper.ts         ゲーム本体とUI
@@ -85,7 +83,7 @@ Rule 5 でも決まらないときは、列挙した置き方の数から各セ�
     └── solver-check.js        推論エンジンの検証(Node)
 ```
 
-`ts/` を編集したら `npm run build:web` で `dist/` に生成します(`dist/` はコミットします。GitHub Pages はビルドせずにそのまま配信するため)。
+手元で動かすときは `npm install` のあと `npm run build:web` で `dist/` に生成し、`index.html` を開きます。`dist/` は Git に入れません。`main` に push すると GitHub Actions がビルドして GitHub Pages に公開します(PR ではビルドが通るかだけ確認します)。
 
 ## 推論エンジンの検証
 
