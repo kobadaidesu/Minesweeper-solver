@@ -130,3 +130,15 @@ npm run test:solver
 | 上級 30×16 / 99 | 32.0% | 40.5% | 53.5% |
 
 推論1回あたりの時間は上級で 2.3ms → 0.3ms、100×100 / 2000 でも 3ms 程度です。
+
+なお、このゲームは最初のクリックの周り8マスにも地雷を置かないので、「最初のクリックだけ安全」を前提にした研究の勝率(上級で 33〜40%)とは条件が違い、直接は比べられません。
+
+## 参考文献
+
+推論エンジンの設計で参考にしたものです。
+
+- Chris Studholme, [Minesweeper as a Constraint Satisfaction Problem](https://www.cs.utoronto.ca/~cvs/minesweeper/minesweeper.pdf) (2001) — マインスイーパーを制約充足問題として扱い、未確定マスを共有する制約を成分に分けて列挙する手法と、残り地雷数で重み付けした確率計算。Rule 5 と確率表示の元になった考え方
+- David J. Becerra, [Algorithmic Approaches to Playing Minesweeper](https://dash.harvard.edu/bitstream/handle/1/14398552/BECERRA-SENIORTHESIS-2015.pdf) (Harvard, 2015) — 単独ルール(single point)と CSP の比較。「安いルールで進めて、止まったら CSP」という段階構成の根拠
+- Richard Kaye, Minesweeper is NP-complete, The Mathematical Intelligencer 22(2) (2000) — 盤面の整合性判定は NP 完全。Rule 5 の全列挙に探索予算を付けて、大きすぎる成分は諦める設計の理由
+- [minesweepr](https://mrgris.com/projects/minesweepr/) — 確率ベースの推測戦略を10万局でシミュレーションした結果。検証スクリプトで勝率を測る発想の参考
+- [minesweepergame.com の論文一覧](https://www.minesweepergame.com/math-papers.php) — 上記を含むマインスイーパー研究のまとめ
