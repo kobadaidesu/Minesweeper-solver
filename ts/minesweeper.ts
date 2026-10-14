@@ -1073,9 +1073,9 @@ class GameUI {
     }
 
     /**
-     * 推論が止まったときの地雷確率をマスに重ねる。次のクリックで消す。
+     * 推論が止まったときの地雷確率を、マスの色の濃さで重ねる。次のクリックで消す。
      * フロンティアのマスは個別の確率、海(数字に接していないマス)は共通の確率。
-     * 緑枠はフロンティアの中で一番低いマス。海のほうが低いときはログで知らせる。
+     * 数値はカーソルを合わせたときの title と、ログの最小値で見られる。
      */
     renderProbabilities(probabilities) {
         this.clearProbabilities();
@@ -1100,9 +1100,7 @@ class GameUI {
             const el = cells[index];
             if (!el) continue;
             el.classList.add('prob');
-            if (p <= bestFrontier + 1e-9 && bestFrontier !== Infinity) el.classList.add('prob-best');
             el.style.setProperty('--p', p.toFixed(3));
-            el.textContent = String(Math.min(99, Math.max(1, Math.round(p * 100))));
             el.title = `地雷の確率 ${(p * 100).toFixed(1)}%`;
             this.probabilityMarked.push(index);
         }
@@ -1119,10 +1117,9 @@ class GameUI {
         for (const index of this.probabilityMarked) {
             const el = cells[index];
             if (!el) continue;
-            el.classList.remove('prob', 'prob-best');
+            el.classList.remove('prob');
             el.style.removeProperty('--p');
             el.removeAttribute('title');
-            if (!el.classList.contains('revealed') && !el.classList.contains('flagged')) el.textContent = '';
         }
         this.probabilityMarked = [];
     }
