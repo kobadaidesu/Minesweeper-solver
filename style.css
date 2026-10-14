@@ -122,6 +122,7 @@ body.is-morning {
 .log-entry.rule-2 { border-left-color: #800000; }
 .log-entry.rule-3 { border-left-color: #000080; }
 .log-entry.rule-4 { border-left-color: #808000; }
+.log-entry.rule-5 { border-left-color: #8e44ad; }
 .log-entry.info { border-left-color: #808080; }
 
 .log-entry .rule-name {
@@ -276,6 +277,20 @@ h1 {
     user-select: none;
     /* all にするとズーム時に全セルの幅・高さがアニメーションして重くなる */
     transition: background 0.1s, transform 0.1s;
+}
+
+/* 推論が止まったときの地雷確率。--p(0〜1)で灰色から赤へ。数字は % */
+.cell.prob {
+    background: color-mix(in srgb, #e74c3c calc(var(--p) * 100%), #bbb);
+    color: #1d1f22;
+    font-size: calc(var(--cell-size, 30px) * 0.38);
+    font-weight: normal;
+}
+
+/* 一番確率が低いマス(複数あれば全部) */
+.cell.prob-best {
+    outline: 2px solid #2ecc71;
+    outline-offset: -2px;
 }
 
 /* セルが小さいとき(縮小表示)。2pxの枠と数字では潰れるので、色だけで状態を見せる */

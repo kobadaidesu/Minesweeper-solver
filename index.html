@@ -145,6 +145,14 @@
               <div class="rule">
                 <strong>Rule 4:</strong> 2つのセルの関係から地雷を推論
               </div>
+              <div class="rule">
+                <strong>Rule 5:</strong> 数字に接するマスの地雷配置を全て試し、
+                どの配置でも共通するマスを確定(残り地雷数も考慮)
+              </div>
+              <div class="rule">
+                <strong>確率表示:</strong> それでも決まらないときは各マスの地雷確率(%)を表示。
+                緑枠が一番低いマス。選ぶのはあなた
+              </div>
             </div>
           </div>
         </div>
@@ -160,6 +168,7 @@
       </footer>
     </div>
 
+    <script src="dist/solver.js"></script>
     <script src="dist/minesweeper.js"></script>
   </body>
 </html>

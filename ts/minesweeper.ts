@@ -45,7 +45,6 @@ class Minesweeper {
         this.clearCount = 0;
         this.neighborsCache = []; // キャッシュを追加
         this.dirtySet = new Set(); // 変更があったセルのインデックスを記録
-        this.extendedNeighborsCache = []; // 2段階先までのネイバーキャッシュ
 
         for (let i = 0; i < this.width * this.height; i++) {
             this.cells.push({
@@ -60,7 +59,6 @@ class Minesweeper {
         }
 
         // 2段階先までのネイバーを事前計算
-        this.precomputeExtendedNeighbors();
     }
 
     calculateNeighbors(index) {
@@ -82,30 +80,6 @@ class Minesweeper {
         }
 
         return neighbors;
-    }
-
-    precomputeExtendedNeighbors() {
-        // 各セルについて、隣接セル+その隣接セルの開示済みセルを事前計算
-        for (let i = 0; i < this.cells.length; i++) {
-            const extendedSet = new Set();
-            const neighbors = this.neighborsCache[i];
-
-            for (let j = 0; j < neighbors.length; j++) {
-                const n = neighbors[j];
-                extendedSet.add(n);
-
-                // 隣接セルの隣接セルも追加（2段階先まで）
-                const secondNeighbors = this.neighborsCache[n];
-                for (let k = 0; k < secondNeighbors.length; k++) {
-                    extendedSet.add(secondNeighbors[k]);
-                }
-            }
-
-            // 自分自身は除外
-            extendedSet.delete(i);
-
-            this.extendedNeighborsCache[i] = Array.from(extendedSet);
-        }
     }
 
     addLog(message, ruleType = 'info') {
@@ -246,155 +220,60 @@ class Minesweeper {
         this.dirtySet.add(index); // 変更を記録
     }
 
-    // Semi-automatic solving logic - applies the 4 rules from the original
+    // ---- 自動推論 ----
+    // 推論そのものは solver.ts(MinesweeperSolver)にある。ここでは盤面のコピーを渡し、
+    // 返ってきた手の列をアニメーション付きで盤面に反映する。
+    // 結果は呼び出し元に返す(止まったときの地雷確率を画面に出すため)。
     async applySolvingRules(onUpdate, onReveal) {
-        if (this.useWorker && this.worker) {
-            return this.applySolvingRulesWithWorker(onUpdate, onReveal);
-        }
-        return this.applySolvingRulesMainThread(onUpdate, onReveal);
+        const result = this.useWorker && this.worker
+            ? await this.solveInWorker()
+            : new MinesweeperSolver(this.width, this.height, this.solverCells(), this.neighborsCache, this.totalMines).solve();
+
+        await this.playSolverSteps(result.steps, onUpdate, onReveal);
+        return result;
     }
 
-    async applySolvingRulesWithWorker(onUpdate, onReveal) {
+    /** エンジンに渡す盤面のコピー。エンジン側で開いたり旗を立てたりするので本体は渡さない */
+    solverCells() {
+        return JSON.parse(JSON.stringify(this.cells));
+    }
+
+    solveInWorker() {
         return new Promise((resolve) => {
-            // Workerにデータを送信
+            this.worker.onmessage = (e) => resolve(e.data);
             this.worker.postMessage({
                 width: this.width,
                 height: this.height,
-                cells: JSON.parse(JSON.stringify(this.cells)), // Deep copy
+                cells: this.solverCells(),
                 neighborsCache: this.neighborsCache,
-                extendedNeighborsCache: this.extendedNeighborsCache,
                 totalMines: this.totalMines
             });
-
-            // Workerからの結果を受信
-            this.worker.onmessage = async (e) => {
-                const { steps } = e.data;
-
-                // ステップごとにアニメーション表示
-                for (const step of steps) {
-                    this.addLog(step.log, step.ruleType);
-
-                    // 変更されたセルをdirtySetに追加
-                    if (step.cells && Array.isArray(step.cells)) {
-                        if (step.type === 'reveal') {
-                            for (const index of step.cells) {
-                                this.revealCell(index);
-                                this.dirtySet.add(index);
-                            }
-                        } else if (step.type === 'flag') {
-                            for (const index of step.cells) {
-                                this.cells[index].isFlagged = true;
-                                this.dirtySet.add(index);
-                            }
-                        }
-
-                        // onRevealコールバックを呼び出し
-                        if (onReveal && step.type === 'reveal') {
-                            onReveal(step.cells);
-                        }
-                    }
-
-                    await this.afterSolvingStep(onUpdate);
-                }
-
-                await this.flushSolvingAnimation(onUpdate);
-                resolve();
-            };
         });
     }
 
-    async applySolvingRulesMainThread(onUpdate, onReveal) {
-        let changed = true;
-        let iterations = 0;
-        const maxIterations = 1000;
+    async playSolverSteps(steps, onUpdate, onReveal) {
+        for (const step of steps) {
+            this.addLog(step.log, step.ruleType);
 
-        while (changed && iterations < maxIterations) {
-            changed = false;
-            iterations++;
-
-            for (let i = 0; i < this.cells.length; i++) {
-                const cell = this.cells[i];
-                if (!cell.isRevealed || cell.neighborMines === 0) continue;
-
-                const neighbors = this.neighborsCache[i];
-
-                // 高速化: filterの代わりにループで直接カウント＆配列作成
-                const flaggedNeighbors = [];
-                const unrevealedNeighbors = [];
-                for (let k = 0; k < neighbors.length; k++) {
-                    const n = neighbors[k];
-                    const neighbor = this.cells[n];
-                    if (neighbor.isFlagged) {
-                        flaggedNeighbors.push(n);
-                    } else if (!neighbor.isRevealed) {
-                        unrevealedNeighbors.push(n);
-                    }
+            if (step.type === 'reveal') {
+                for (const index of step.cells) {
+                    this.revealCell(index);
+                    this.dirtySet.add(index);
                 }
-
-                // Rule 1: If number equals flagged count, reveal all unrevealed neighbors
-                if (cell.neighborMines === flaggedNeighbors.length && unrevealedNeighbors.length > 0) {
-                    // 座標変換を遅延評価(ログ出力時のみ実行)
-                    const coords = this.indexToCoords(i);
-                    const targetCoords = unrevealedNeighbors.map(n => this.indexToCoords(n)).join(', ');
-                    this.addLog(`Rule 1: ${coords} の周りの安全なセルを開く: ${targetCoords}`, 'rule-1');
-
-                    // バッチ処理: まとめて開いてから1回だけ描画
-                    const revealedIndices = [];
-                    for (const n of unrevealedNeighbors) {
-                        if (this.revealCell(n)) {
-                            changed = true;
-                            revealedIndices.push(n);
-                        }
-                    }
-
-                    if (changed) {
-                        if (onReveal && revealedIndices.length > 0) {
-                            onReveal(revealedIndices);
-                        }
-                        await this.afterSolvingStep(onUpdate);
-                    }
-                }
-
-                // Rule 2: If number equals unrevealed + flagged count, flag all unrevealed
-                if (cell.neighborMines === flaggedNeighbors.length + unrevealedNeighbors.length && unrevealedNeighbors.length > 0) {
-                    const coords = this.indexToCoords(i);
-                    const targetCoords = unrevealedNeighbors.map(n => this.indexToCoords(n)).join(', ');
-                    this.addLog(`Rule 2: ${coords} の周りに地雷を配置: ${targetCoords}`, 'rule-2');
-
-                    // バッチ処理: まとめて旗を立ててから1回だけ描画
-                    for (const n of unrevealedNeighbors) {
-                        this.cells[n].isFlagged = true;
-                        this.dirtySet.add(n); // 変更を記録
-                        changed = true;
-                    }
-
-                    if (changed) {
-                        await this.afterSolvingStep(onUpdate);
-                    }
-                }
-
-                // Rules 3 & 4: Compare two neighboring number cells
-                if (changed) continue; // Skip complex rules if simple rules worked
-
-                // 最適化: 事前計算された拡張ネイバーキャッシュを使用
-                const extendedNeighbors = this.extendedNeighborsCache[i];
-                for (let k = 0; k < extendedNeighbors.length; k++) {
-                    const j = extendedNeighbors[k];
-
-                    // 開示済みで数字があるセルのみをチェック
-                    if (!this.cells[j].isRevealed || this.cells[j].neighborMines === 0) continue;
-
-                    const result = await this.applyAdvancedRules(i, j, onUpdate, onReveal);
-                    if (result) {
-                        changed = true;
-                        break;
-                    }
+                if (onReveal) onReveal(step.cells);
+            } else if (step.type === 'flag') {
+                for (const index of step.cells) {
+                    this.cells[index].isFlagged = true;
+                    this.dirtySet.add(index);
                 }
             }
+
+            await this.afterSolvingStep(onUpdate);
+
+            // 旗の置き間違いで地雷を踏んだら、残りの手は適用しない
+            if (this.gameState !== 'playing') break;
         }
 
-        // Final rule: If unrevealed cells equal remaining mines, flag all
-        await this.applyFinalRule(onUpdate);
         await this.flushSolvingAnimation(onUpdate);
     }
 
@@ -432,125 +311,6 @@ class Minesweeper {
         this.fastFrameStepCount = 0;
         onUpdate();
         await new Promise(resolve => requestAnimationFrame(resolve));
-    }
-
-    async applyAdvancedRules(indexA, indexB, onUpdate, onReveal) {
-        const cellA = this.cells[indexA];
-        const cellB = this.cells[indexB];
-
-        const neighborsA = this.neighborsCache[indexA];
-        const neighborsB = this.neighborsCache[indexB];
-
-        // 高速化: Setを使って隣接セルを効率的に管理
-        const neighborsBSet = new Set(neighborsB);
-
-        // フィルター処理を1ループで実行
-        const flaggedA = [];
-        const unrevealedA = [];
-        const uniqueToA = [];
-
-        for (let i = 0; i < neighborsA.length; i++) {
-            const n = neighborsA[i];
-            const neighbor = this.cells[n];
-
-            if (neighbor.isFlagged) {
-                flaggedA.push(n);
-            } else if (!neighbor.isRevealed) {
-                unrevealedA.push(n);
-                if (!neighborsBSet.has(n)) {
-                    uniqueToA.push(n);
-                }
-            }
-        }
-
-        // BについてもUnique計算が必要な場合のみ処理
-        let flaggedBCount = 0;
-        let uniqueToB = [];
-        const neighborsASet = new Set(neighborsA);
-
-        for (let i = 0; i < neighborsB.length; i++) {
-            const n = neighborsB[i];
-            const neighbor = this.cells[n];
-
-            if (neighbor.isFlagged) {
-                flaggedBCount++;
-            } else if (!neighbor.isRevealed && !neighborsASet.has(n)) {
-                uniqueToB.push(n);
-            }
-        }
-
-        if (uniqueToA.length === 0 && uniqueToB.length === 0) return false;
-
-        const remainingA = cellA.neighborMines - flaggedA.length;
-        const remainingB = cellB.neighborMines - flaggedBCount;
-
-        // Rule 3: If A's remaining equals B's remaining minus unique to B, reveal unique to A
-        if (uniqueToA.length > 0 && remainingA === remainingB - uniqueToB.length) {
-            const coordsA = this.indexToCoords(indexA);
-            const coordsB = this.indexToCoords(indexB);
-            const targetCoords = uniqueToA.map(n => this.indexToCoords(n)).join(', ');
-            this.addLog(`Rule 3: ${coordsA} と ${coordsB} の関係から安全なセルを推論: ${targetCoords}`, 'rule-3');
-
-            // バッチ処理: まとめて開いてから1回だけ描画
-            for (const n of uniqueToA) {
-                this.revealCell(n);
-            }
-
-            if (onReveal && uniqueToA.length > 0) {
-                onReveal(uniqueToA);
-            }
-            await this.afterSolvingStep(onUpdate);
-            return true;
-        }
-
-        // Rule 4: If B's remaining equals A's remaining minus unique to A, flag unique to A
-        if (uniqueToA.length > 0 && remainingB === remainingA - uniqueToA.length) {
-            const coordsA = this.indexToCoords(indexA);
-            const coordsB = this.indexToCoords(indexB);
-            const targetCoords = uniqueToA.map(n => this.indexToCoords(n)).join(', ');
-            this.addLog(`Rule 4: ${coordsA} と ${coordsB} の関係から地雷を推論: ${targetCoords}`, 'rule-4');
-
-            // バッチ処理: まとめて旗を立ててから1回だけ描画
-            for (const n of uniqueToA) {
-                this.cells[n].isFlagged = true;
-                this.dirtySet.add(n); // 変更を記録
-            }
-
-            await this.afterSolvingStep(onUpdate);
-            return true;
-        }
-
-        return false;
-    }
-
-    async applyFinalRule(onUpdate) {
-        // 高速化: 1ループで両方をカウント
-        const unrevealedCells = [];
-        let flaggedCount = 0;
-
-        for (let i = 0; i < this.cells.length; i++) {
-            const cell = this.cells[i];
-            if (cell.isFlagged) {
-                flaggedCount++;
-            } else if (!cell.isRevealed) {
-                unrevealedCells.push(cell);
-            }
-        }
-
-        const remainingMines = this.totalMines - flaggedCount;
-
-        if (unrevealedCells.length === remainingMines && remainingMines > 0) {
-            const targetCoords = unrevealedCells.map(c => this.indexToCoords(c.index)).join(', ');
-            this.addLog(`最終ルール: 残りの未探索セル全てに地雷を配置: ${targetCoords}`, 'rule-4');
-
-            // バッチ処理: まとめて旗を立ててから1回だけ描画
-            for (const cell of unrevealedCells) {
-                cell.isFlagged = true;
-                this.dirtySet.add(cell.index); // 変更を記録
-            }
-
-            await this.afterSolvingStep(onUpdate);
-        }
     }
 
     checkWin() {
@@ -601,7 +361,8 @@ class Minesweeper {
         if (this.startTime) {
             const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
             const display = Math.min(elapsed, 999);
-            document.getElementById('timer').textContent = display.toString().padStart(3, '0');
+            const timer = document.getElementById('timer');
+            if (timer) timer.textContent = display.toString().padStart(3, '0');
         }
     }
 
@@ -666,6 +427,7 @@ class GameUI {
         this.zoom = 1;
         this.baseCellSize = 30;
         this.cellSize = 30;
+        this.probabilityMarked = []; // 地雷確率を表示中のマス
         this.newGameBtn = document.getElementById('newGameBtn');
         this.logElement = document.getElementById('reasoningLog');
         this.logScrollPending = false; // ログスクロールの重複防止フラグ
@@ -1067,6 +829,7 @@ class GameUI {
 
     renderBoard() {
         this.boardElement.innerHTML = '';
+        this.probabilityMarked = [];
 
         // イベントリスナーの委任: 既存のリスナーを削除してから新しく設定
         if (this.boardClickHandler) {
@@ -1228,6 +991,7 @@ class GameUI {
         // 最初にクリックしたセルを記録
         this.lastRevealedCell = cellElement;
 
+        this.clearProbabilities();
         this.game.revealCell(index);
         this.updateBoard();
 
@@ -1243,9 +1007,10 @@ class GameUI {
         this.chainCounter = 0;
 
         // Apply automatic solving rules with animation
+        let solverResult = null;
         if (this.game.gameState === 'playing') {
             this.game.isAnimating = true;
-            await this.game.applySolvingRules(() => {
+            solverResult = await this.game.applySolvingRules(() => {
                 this.updateBoard();
                 this.updateProgressBar();
                 this.updateComboCounter();
@@ -1300,6 +1065,66 @@ class GameUI {
         this.updateBoard();
         this.updateProgressBar();
         this.updateComboCounter();
+
+        // 推論が止まったら(勝敗がついていなければ)地雷確率を出す
+        if (solverResult && this.game.gameState === 'playing') {
+            this.renderProbabilities(solverResult.probabilities);
+        }
+    }
+
+    /**
+     * 推論が止まったときの地雷確率をマスに重ねる。次のクリックで消す。
+     * フロンティアのマスは個別の確率、海(数字に接していないマス)は共通の確率。
+     * 緑枠はフロンティアの中で一番低いマス。海のほうが低いときはログで知らせる。
+     */
+    renderProbabilities(probabilities) {
+        this.clearProbabilities();
+        if (!probabilities) return;
+
+        const cells = this.cellElements || this.boardElement.children;
+        const marks = new Map();
+        let bestFrontier = Infinity;
+        for (const { index, p } of probabilities.frontier) {
+            marks.set(index, p);
+            bestFrontier = Math.min(bestFrontier, p);
+        }
+        if (probabilities.sea !== null) {
+            for (let i = 0; i < this.game.cells.length; i++) {
+                const cell = this.game.cells[i];
+                if (!cell.isRevealed && !cell.isFlagged && !marks.has(i)) marks.set(i, probabilities.sea);
+            }
+        }
+        if (marks.size === 0) return;
+
+        for (const [index, p] of marks) {
+            const el = cells[index];
+            if (!el) continue;
+            el.classList.add('prob');
+            if (p <= bestFrontier + 1e-9 && bestFrontier !== Infinity) el.classList.add('prob-best');
+            el.style.setProperty('--p', p.toFixed(3));
+            el.textContent = String(Math.min(99, Math.max(1, Math.round(p * 100))));
+            el.title = `地雷の確率 ${(p * 100).toFixed(1)}%`;
+            this.probabilityMarked.push(index);
+        }
+
+        const percent = (p) => `${(p * 100).toFixed(1)}%`;
+        let message = '推論が止まりました。';
+        if (bestFrontier !== Infinity) message += ` 数字に接するマスの最小: ${percent(bestFrontier)}`;
+        if (probabilities.sea !== null) message += ` / 接していないマス: ${percent(probabilities.sea)}`;
+        this.game.addLog(message, 'info');
+    }
+
+    clearProbabilities() {
+        const cells = this.cellElements || this.boardElement.children;
+        for (const index of this.probabilityMarked) {
+            const el = cells[index];
+            if (!el) continue;
+            el.classList.remove('prob', 'prob-best');
+            el.style.removeProperty('--p');
+            el.removeAttribute('title');
+            if (!el.classList.contains('revealed') && !el.classList.contains('flagged')) el.textContent = '';
+        }
+        this.probabilityMarked = [];
     }
 
     handleCellRightClick(index) {
