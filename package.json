@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "build:web": "tsc -p tsconfig.json",
-    "check:web": "tsc -p tsconfig.json --noEmit"
+    "check:web": "tsc -p tsconfig.json --noEmit",
+    "test:solver": "node tests/solver-check.js"
   },
   "devDependencies": {
     "typescript": "^5.9.3"
