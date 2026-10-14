@@ -1,2 +1,4 @@
 target/
 node_modules/
+# npm run build:web の出力。公開は GitHub Actions がビルドして行う
+dist/

@@ -1,0 +1,58 @@
+# GitHub Pages への公開。
+# main に push されるたびに TypeScript をビルドし、できたファイルを Pages に送る。
+# dist/ はリポジトリに含めない(.gitignore)ので、ビルド忘れで公開版が古くなることがない。
+# PR ではビルドが通るかだけ確かめて、公開はしない。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同じブランチで続けて push されたら、古いほうの実行は止める
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:web
+
+      # 公開に必要なものだけ集める(ts/ や tests/ は配らない)
+      - name: Collect site files
+        run: |
+          mkdir -p site
+          cp index.html style.css site/
+          cp -r dist site/dist
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    # main への push のときだけ公開する
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
