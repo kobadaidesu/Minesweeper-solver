@@ -2,7 +2,6 @@
 
 **▶ ブラウザで遊ぶ: https://kobadaidesu.github.io/Minesweeper-solver/**
 
-生成AIを補助的に活用しながら、TypeScriptで実装しました。
 
 ## 概要
 
