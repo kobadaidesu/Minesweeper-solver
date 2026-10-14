@@ -279,11 +279,8 @@ h1 {
     transition: background 0.1s, transform 0.1s;
 }
 
-/* 推論が止まったときの地雷確率。--p(0〜1)が大きいほど赤く。
-   確率が低くても「情報がある」と分かるように、少しだけ下駄を履かせる */
-.cell.prob {
-    background: color-mix(in srgb, #e74c3c calc(10% + var(--p) * 90%), #bbb);
-}
+/* 推論が止まったときの地雷確率(.cell.prob)は、JS側が background-color を直接入れる。
+   CSSの color-mix() に var() を渡すと、transition と組み合わせたときに Chrome で色が付かないため */
 
 /* セルが小さいとき(縮小表示)。2pxの枠と数字では潰れるので、色だけで状態を見せる */
 .game-board--compact .cell {

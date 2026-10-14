@@ -381,6 +381,16 @@ const COMPACT_CELL_SIZE = 12;
 const ZOOM_STEP = 1.25;
 /** ホイール1ノッチ(deltaY≈100)でおよそ ×1.22。ピンチは deltaY が小さいので滑らかに動く */
 const WHEEL_ZOOM_SENSITIVITY = 0.002;
+/**
+ * 地雷確率(0〜1)をマスの色にする。未探索の灰色(#bbb)から地雷の赤(#e74c3c)へ。
+ * 確率が低くても「情報がある」と分かるように、少しだけ赤に寄せておく。
+ * CSSの color-mix() に var() を渡す方法は、transition と組み合わせると Chrome で色が付かなかった。
+ */
+function probabilityColor(p) {
+    const t = 0.1 + 0.9 * p;
+    const mix = (from, to) => Math.round(from + (to - from) * t);
+    return `rgb(${mix(187, 231)}, ${mix(187, 76)}, ${mix(187, 60)})`;
+}
 class GameUI {
     constructor() {
         this.game = null;
@@ -974,7 +984,7 @@ class GameUI {
             if (!el)
                 continue;
             el.classList.add('prob');
-            el.style.setProperty('--p', p.toFixed(3));
+            el.style.backgroundColor = probabilityColor(p);
             el.title = `地雷の確率 ${(p * 100).toFixed(1)}%`;
             this.probabilityMarked.push(index);
         }
@@ -993,7 +1003,7 @@ class GameUI {
             if (!el)
                 continue;
             el.classList.remove('prob');
-            el.style.removeProperty('--p');
+            el.style.removeProperty('background-color');
             el.removeAttribute('title');
         }
         this.probabilityMarked = [];
