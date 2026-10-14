@@ -1,5 +1,7 @@
 # Semi-Automatic Minesweeper
 
+**▶ ブラウザで遊ぶ: https://kobadaidesu.github.io/Minesweeper-solver/**
+
 TypeScript版を中心に実装し、Rust版はRustおよびネイティブGUIの学習を目的として、生成AIを補助的に活用しながら試作しました。
 
 ## 概要
